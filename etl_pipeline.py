@@ -2,6 +2,7 @@ import requests
 import json
 import pandas as pd
 from sqlalchemy import create_engine
+from sqlalchemy.types import BigInteger
 import schedule
 import time
 from datetime import datetime
@@ -33,22 +34,54 @@ def transform(data):
 
     # เลือก column ที่ต้องการ
     columns = [
-        'currency', 'id', 'symbol', 'name', 'current_price', 'market_cap' #,
-        #'market_cap_rank', 'total_volume', 'high_24h', 'low_24h',
-        #'price_change_percentage_24h', 'circulating_supply',
-        #'total_supply', 'max_supply'
+        'currency','id','symbol','name','current_price','market_cap','market_cap_rank','total_volume',
+         'high_24h','low_24h','price_change_24h','price_change_percentage_24h','circulating_supply',
+         'total_supply','ath','ath_change_percentage'
         , 'last_updated', 'roi'
     ]
     
     df = pd.DataFrame(data)[columns]
     
     # แปลงประเภทข้อมูล
-    df['last_updated'] = pd.to_datetime(df['last_updated'], errors='coerce')  # แปลง last_updated เป็น datetime
-    df = df.dropna(subset=['last_updated'])  # ลบแถวที่ไม่มีค่าใน last_updated
+    
     df['current_price'] = pd.to_numeric(df['current_price'], errors='coerce')
     df = df.dropna(subset=['current_price'])
-    df['market_cap'] = df['market_cap'].astype('int64')  # แปลงเป็น integer
+
+    df['market_cap'] = pd.to_numeric(df['market_cap'], errors='coerce')
     df = df.dropna(subset=['market_cap'])
+
+    df['market_cap_rank'] = pd.to_numeric(df['market_cap_rank'], errors='coerce')
+    df = df.dropna(subset=['market_cap_rank'])
+
+    df['total_volume'] = pd.to_numeric(df['total_volume'], errors='coerce')
+    df = df.dropna(subset=['total_volume'])
+
+    df['high_24h'] = pd.to_numeric(df['high_24h'], errors='coerce')
+    df = df.dropna(subset=['high_24h'])
+
+    df['low_24h'] = pd.to_numeric(df['low_24h'], errors='coerce')
+    df = df.dropna(subset=['low_24h'])
+
+    df['price_change_24h'] = pd.to_numeric(df['price_change_24h'], errors='coerce')
+    df = df.dropna(subset=['price_change_24h'])
+
+    df['price_change_percentage_24h'] = pd.to_numeric(df['price_change_percentage_24h'], errors='coerce')
+    df = df.dropna(subset=['price_change_percentage_24h'])
+
+    df['circulating_supply'] = pd.to_numeric(df['circulating_supply'], errors='coerce')
+    df = df.dropna(subset=['circulating_supply'])
+
+    df['total_supply'] = pd.to_numeric(df['total_supply'], errors='coerce')
+    df = df.dropna(subset=['total_supply'])
+
+    df['ath'] = pd.to_numeric(df['ath'], errors='coerce')
+    df = df.dropna(subset=['ath'])
+
+    df['ath_change_percentage'] = pd.to_numeric(df['ath_change_percentage'], errors='coerce')
+    df = df.dropna(subset=['ath_change_percentage'])
+
+    df['last_updated'] = pd.to_datetime(df['last_updated'], errors='coerce')  # แปลง last_updated เป็น datetime
+    df = df.dropna(subset=['last_updated'])  # ลบแถวที่ไม่มีค่าใน last_updated
 
     print(f"[{datetime.now()}] Transformed to {len(df)} clean records.")
 
@@ -56,6 +89,7 @@ def transform(data):
 
 # === Step 3: Load ===
     # โหลดข้อมูลลงในฐานข้อมูล
+
 def load(df):
     print(f"[{datetime.now()}] Starting load to database...")
     engine = create_engine('sqlite:///crypto_data.db', echo=True, connect_args={'timeout': 30})
@@ -67,7 +101,17 @@ def load(df):
     df = df.where(pd.notnull(df), None)
 
     # จากนั้นทำการ load ข้อมูลไปยังฐานข้อมูล
-    df.to_sql('crypto_prices', con=engine, if_exists='replace', index=False)
+    df.to_sql(
+    'crypto_prices',
+    con=engine,
+    if_exists='replace',
+    index=False,
+    dtype={
+        'circulating_supply': BigInteger(),
+        'total_supply': BigInteger(),
+        'market_cap': BigInteger()
+    }
+)
 
     # ดูคอลัมน์ที่มีใน DataFrame
     print(df.columns)
@@ -78,12 +122,13 @@ def load(df):
 # === Step 4: Schedule Job ===
 def run_etl():
     data = extract()
+    
     if data:
-        df = transform(data)
-        if not df.empty:
-            load(df)
-
-# Set job to run at 00:29
+       df = transform(data)
+       if not df.empty:
+           load(df)
+    
+# Set job to run at 08:48
 # schedule.every().day.at("08:48").do(run_etl)
 
 run_etl()
